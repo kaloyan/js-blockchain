@@ -1,10 +1,43 @@
 import SHA256 from "crypto-js/sha256.js";
+import Elliptic from "elliptic";
 
-class Transaction {
+// elliptic curve function
+const ec = new Elliptic.ec("secp256k1");
+
+export class Transaction {
   constructor(fromAddress, toAddress, amount) {
     this.fromAddress = fromAddress;
     this.toAddress = toAddress;
     this.amount = amount;
+    this.timestamp = new Date();
+  }
+
+  calculateHash() {
+    return SHA256(
+      this.fromAddress + this.toAddress + this.amount + this.timestamp
+    ).toString();
+  }
+
+  signTransaction(signingKey) {
+    if (signingKey.getPublic("hex") !== this.fromAddress) {
+      throw new Error("You cannot sign transactions for other wallets!");
+    }
+
+    const txHash = this.calculateHash();
+    const sig = signingKey.sign(txHash, "base64");
+    this.signature = sig.toDER("hex");
+  }
+
+  isValid() {
+    if (this.fromAddress == null) return true;
+
+    if (!this.signature || this.signature.lenght == 0) {
+      throw new Error("No signature in this transaction!");
+    }
+
+    const publicKey = ec.keyFromPublic(this.fromAddress, "hex");
+
+    return publicKey.verify(this.calculateHash(), this.signature);
   }
 }
 
@@ -37,9 +70,19 @@ class Block {
 
     console.log(`Block mined: ${this.hash}`);
   }
+
+  hasValidTransactions() {
+    for (const tx of this.transactions) {
+      if (!tx.isValid()) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 }
 
-class Blockchain {
+export class Blockchain {
   constructor() {
     this.chain = [this.createGenesisBlock()];
     this.difficulty = 2;
@@ -56,7 +99,13 @@ class Blockchain {
   }
 
   minePendingTransactions(miningRewardAddress) {
-    const block = new Block(new Date(), this.pendingTransactions);
+    const lastBlock = this.chain[this.chain.length - 1];
+
+    const block = new Block(
+      new Date(),
+      this.pendingTransactions,
+      lastBlock.hash
+    );
     block.mineBlock(this.difficulty);
 
     console.log("Block mined successfully.");
@@ -68,7 +117,15 @@ class Blockchain {
     ];
   }
 
-  createTransaction(transaction) {
+  addTransaction(transaction) {
+    if (!transaction.fromAddress || !transaction.toAddress) {
+      throw new Error("Transactions must include from and to address");
+    }
+
+    if (!transaction.isValid()) {
+      throw new Error("Cannot add invalid transaction to the chain");
+    }
+
     this.pendingTransactions.push(transaction);
   }
 
@@ -95,6 +152,10 @@ class Blockchain {
       const currentBlock = this.chain[i];
       const previousBlock = this.chain[i - 1];
 
+      if (!currentBlock.hasValidTransactions()) {
+        return false;
+      }
+
       if (currentBlock.hash !== currentBlock.calculateHash()) {
         return false;
       }
@@ -107,22 +168,3 @@ class Blockchain {
     return true;
   }
 }
-
-const myCoin = new Blockchain();
-
-myCoin.createTransaction(new Transaction("address1", "address2", 100));
-myCoin.createTransaction(new Transaction("address2", "address1", 50));
-
-console.log("starting mining");
-
-myCoin.minePendingTransactions("address-3");
-
-console.log(
-  `balance of address-3 is: ${myCoin.getBalanceOfAddress("address-3")}`
-);
-
-myCoin.minePendingTransactions("address-3");
-
-console.log(
-  `balance of address-3 is: ${myCoin.getBalanceOfAddress("address-3")}`
-);
