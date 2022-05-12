@@ -31,7 +31,7 @@ export class Transaction {
   isValid() {
     if (this.fromAddress == null) return true;
 
-    if (!this.signature || this.signature.lenght == 0) {
+    if (!this.signature || this.signature.lenght === 0) {
       throw new Error("No signature in this transaction!");
     }
 
@@ -134,11 +134,11 @@ export class Blockchain {
 
     for (const block of this.chain) {
       for (const transaction of block.transactions) {
-        if (transaction.fromAddress == address) {
+        if (transaction.fromAddress === address) {
           balance -= transaction.amount;
         }
 
-        if (transaction.toAddress == address) {
+        if (transaction.toAddress === address) {
           balance += transaction.amount;
         }
       }
